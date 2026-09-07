@@ -17,7 +17,9 @@ export const datacategory = z.object({
     .optional(),
 });
 
-export const datapost = z.object({
+export type CategoryInput = z.infer<typeof datacategory>;
+
+export const dataposts = z.object({
   title: z
     .string()
     .min(1, "Title is required")
@@ -64,4 +66,7 @@ export const datapost = z.object({
     .enum(["draft", "published"])
     .default("published"),
 });
+
+export type PostInput = z.infer<typeof dataposts>;
+
 
