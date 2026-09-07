@@ -1,6 +1,8 @@
 import express, { type Express, type Request, type Response } from 'express';
 import cors from "cors";
 import pool from './db/index.ts';
+import type { ResultSetHeader } from "mysql2/promise";
+
 
 const app: Express = express();
 const port = 8000;
@@ -17,15 +19,30 @@ app.get("/api/categories", async (req: Request, res: Response) => {
     })
 })
 
-app.get('/', (req: Request, res: Response) => {
-  res.send('Hello World!');
+
+app.post("/api/users", async (req: Request, res: Response) => {
+  try {
+    const validasiData  = dataUsers.parse(req.body);
+
+    const { username, email, password} = validasiData;
+
+    const [users] = await pool.query<ResultSetHeader>(`INSERT INTO users (username, email, password) VALUES(?, ?, ?)`, [username, email, password]);
+
+    res.status(201).json({
+      message: "Users created succesfully",
+      data: {
+        usersId: users.insertId,
+        username,
+      }
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      message: "Failed to create users"
+    })
+  }
 });
-
-app.get("/api/categories", async (req: Request, res: Response) => {
-    res
-})
-
-
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
