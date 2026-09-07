@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const categorySchema = z.object({
+export const datacategory = z.object({
   name: z
     .string()
     .min(1, "Category name is required")
@@ -17,7 +17,7 @@ export const categorySchema = z.object({
     .optional(),
 });
 
-export const postSchema = z.object({
+export const datapost = z.object({
   title: z
     .string()
     .min(1, "Title is required")
@@ -64,3 +64,4 @@ export const postSchema = z.object({
     .enum(["draft", "published"])
     .default("published"),
 });
+

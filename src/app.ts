@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import cors from "cors";
 import pool from './db/index.ts';
 import type { ResultSetHeader } from "mysql2/promise";
-
+import { datacategory, datapost } from './db/data_schema.ts';
 
 const app: Express = express();
 const port = 8000;
@@ -20,26 +20,27 @@ app.get("/api/categories", async (req: Request, res: Response) => {
 })
 
 
-app.post("/api/users", async (req: Request, res: Response) => {
+app.post("/api/categories", async (req: Request, res: Response) => {
   try {
-    const validasiData  = dataUsers.parse(req.body);
+    const validasiData  = datacategory.parse(req.body);
 
-    const { username, email, password} = validasiData;
+    const { name, slug, description, created_at, updated_at} = validasiData;
 
-    const [users] = await pool.query<ResultSetHeader>(`INSERT INTO users (username, email, password) VALUES(?, ?, ?)`, [username, email, password]);
+    const [Category] = await pool.query<ResultSetHeader>(`INSERT INTO categories (name, slug, description, created_at, updated_at) VALUES(?, ?, ?, ?, ?)`, 
+        [name, slug, description, created_at, updated_at]);
 
     res.status(201).json({
-      message: "Users created succesfully",
+      message: "category created succesfully",
       data: {
-        usersId: users.insertId,
-        username,
+        categoryId: Category.insertId,
+        name,
       }
     });
   } catch (error) {
     console.error(error);
 
     res.status(500).json({
-      message: "Failed to create users"
+      message: "Failed to create category"
     })
   }
 });
