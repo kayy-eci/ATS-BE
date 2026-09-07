@@ -8,12 +8,12 @@ const port = 8000;
 app.use(cors());
 app.use(express.json());
 
-app.get("/api/users", async (req: Request, res: Response) => {
-    const [users] = await pool.query("select * from users;")
+app.get("/api/categories", async (req: Request, res: Response) => {
+    const [categories] = await pool.query("select * from categories;")
 
     res.status(200).json({
-        message: "Berhasil fetch users!",
-        data : users
+        message: "Berhasil fetch categori!",
+        data : categories
     })
 })
 
