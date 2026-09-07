@@ -120,17 +120,11 @@ app.delete("/api/categories/:id", async (req, res) => {
 });
 
 app.get("/api/posts", async (req: Request, res: Response) => {
-
     const [posts] = await pool.query("select * from posts;")
-
     res.status(200).json({
-
         message: "Berhasil fetch posts!",
-
         data : posts
-
     })
-
 })
 
 
