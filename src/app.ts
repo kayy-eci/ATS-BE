@@ -136,109 +136,63 @@ app.get("/api/posts", async (req: Request, res: Response) => {
 
 
 app.post("/api/posts", async (req: Request, res: Response) => {
-
   try {
-
     const validasiData = dataposts.parse(req.body);
-
     const { title, slug, content, excerpt, cover_image, category_id, author, status } = validasiData;
-
     const [Post] = await pool.query<ResultSetHeader>(
-
       `INSERT INTO posts (title, slug, content, excerpt, cover_image, category_id, author, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-
       [title, slug, content, excerpt, cover_image, category_id, author, status]
-
     );
-
     res.status(201).json({
-
       message: "post created succesfully",
-
       data: {
-
         postId: Post.insertId,
         title,
-
       }
-
     });
-
   } catch (error) {
-
     console.error(error);
-
     res.status(500).json({
-
       message: "Failed to create post"
-
     })
-
   }
-
 });
 
 
 
 app.put("/api/posts/:id", async (req: Request, res: Response) => {
-
   try {
-
     const id = Number(req.params.id);
 
     if (Number.isNaN(id) || id <= 0) {
-
       res.status(400).json({
-
         message: "Invalid post ID",
-
       });
-
       return;
-
     }
 
     const validasiData = dataposts.parse(req.body);
-
     const { title, slug, content, excerpt, cover_image, category_id, author, status } = validasiData;
-
     const [Post] = await pool.query<ResultSetHeader>(
-
       "UPDATE posts SET title = ?, slug = ?, content = ?, excerpt = ?, cover_image = ?, category_id = ?, author = ?, status = ? WHERE id = ?",
-
       [title, slug, content, excerpt, cover_image, category_id, author, status, id]
-
     );
 
     if (Post.affectedRows == 0) {
-
       res.status(404).json({
-
         message : "error"
-
       });
-
       return;
-
     }
-
     res.status(200).json({
-
       message: "Data post berhasil diupdate"
-
     });
-
   } catch (error){
-
     res.status(400).json({
-
       message: "Data post tidak valid"
-
     });
-
   };
-
 });
 
 
@@ -267,19 +221,12 @@ app.delete("/api/posts/:id", async (req, res) => {
     }
     res.status(200).json({
       message: "post berhasil dihapus",
-
     });
-
   } catch (error) {
-
     res.status(500).json({
-
       message: "post gagal dihapus",
-
     });
-
   }
-
 });
 
 app.listen(port, () => {
