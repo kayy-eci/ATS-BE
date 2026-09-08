@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import cors from "cors";
 import pool from './db/index.ts';
 import type { ResultSetHeader } from "mysql2/promise";
-import { datacategory, dataposts } from './db/data_schema.ts';
+import { datacategory, dataposts, datausers } from './db/data_schema.ts';
 
 const app: Express = express();
 const port = 8000;
@@ -222,6 +222,102 @@ app.delete("/api/posts/:id", async (req, res) => {
     });
   }
 });
+
+app.get("/api/users", async (req: Request, res: Response) => {
+  const [users] = await pool.query("select * from users");
+
+  res.status(201).json({
+    message: "fetch data user berhasil",
+    users: users
+  })
+})
+
+
+app.post("/api/users", async (req: Request, res: Response) => {
+  try {
+    const validasiData = datausers.parse(req.body);
+    const { username, email, password } = validasiData;
+    const [users] = await pool.query<ResultSetHeader>("INSERT INTO users (username, email, password) values (?, ?, ?)", [username, email, password]);
+
+    res.status(201).json({
+      message: "User berhasil di buat",
+      data: {
+        userId: users.insertId,
+        username: username,
+        email: email,
+        password: password
+      }
+    })
+    
+  } catch(error) {
+    res.status(500).json({
+      message: "Gagal membuat users"
+    }) 
+  }
+})
+
+
+app.put("/api/users/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (Number.isNaN(id) || id <= 0) {
+      res.status(400).json({
+        message: "Invalid post ID",
+      });
+      return;
+    }
+    const validasiData = datausers.parse(req.body);
+    const { username, email, password } = validasiData;
+    const [users] = await pool.query<ResultSetHeader>("UPDATE users SET username = ?, email = ?, password = ? WHERE id = ?",
+      [username, email, password, id]);
+
+    res.status(201).json({
+      message: "Berhasil mengubah users",
+      data: {
+        username: username,
+        email: email,
+        password: password
+      }
+    })
+
+  } catch(error) {
+    res.status(500).json({
+      message: "gagal mengubah users"
+    })
+  }
+})
+
+app.delete("/api/users/:id", async (req: Request, res: Response) => {
+    try {
+    const id = Number(req.params.id);
+
+    if (Number.isNaN(id) || id <= 0) {
+      res.status(400).json({
+        message: "Invalid post ID",
+      });
+      return;
+    }
+    const [users] = await pool.query<ResultSetHeader>("DELETE FROM users WHERE id = ?",
+      [id]);
+
+    if (users.affectedRows === 0) {
+      res.status(404).json({
+        message: "users tidak ditemukan",
+      });
+      return;
+    }
+    res.status(200).json({
+      message: "users berhasil dihapus",
+    });
+
+  } catch(error) {
+    res.status(500).json({
+      message: "gagal menghapus users"
+    })
+  }
+})
+
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);

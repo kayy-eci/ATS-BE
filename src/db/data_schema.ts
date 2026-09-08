@@ -11,10 +11,7 @@ export const datacategory = z.object({
     .min(1, "Slug is required")
     .max(120, "Slug must be at most 120 characters"),
 
-  description: z
-    .string()
-    .nullable()
-    .optional(),
+  description: z.string().nullable().optional(),
 });
 
 export type CategoryInput = z.infer<typeof datacategory>;
@@ -30,14 +27,12 @@ export const dataposts = z.object({
     .max(255, "Slug must be at most 255 characters")
     .regex(
       /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-      "Slug must contain only lowercase letters, numbers, and hyphens"
+      "Slug must contain only lowercase letters, numbers, and hyphens",
     )
     .nullable()
     .optional(),
 
-  content: z
-    .string()
-    .min(1, "Content is required"),
+  content: z.string().min(1, "Content is required"),
 
   excerpt: z
     .string()
@@ -62,11 +57,13 @@ export const dataposts = z.object({
     .nullable()
     .optional(),
 
-  status: z
-    .enum(["draft", "published"])
-    .default("published"),
+  status: z.enum(["draft", "published"]).default("published"),
 });
 
 export type PostInput = z.infer<typeof dataposts>;
 
-
+export const datausers = z.object({
+  username: z.string().min(4),
+  email: z.email("invalid email addresess"),
+  password: z.string().min(4),
+});
