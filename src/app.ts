@@ -1,7 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pool from "./db/index.ts";
-import type { QueryResult, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { credentials, datacategory, dataposts, datausers } from "./db/data_schema.ts";
 import jwt from "jsonwebtoken"
 
