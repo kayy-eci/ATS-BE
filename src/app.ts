@@ -1,8 +1,9 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pool from "./db/index.ts";
-import type { ResultSetHeader } from "mysql2/promise";
-import { datacategory, dataposts, datausers } from "./db/data_schema.ts";
+import type { QueryResult, ResultSetHeader, RowDataPacket } from "mysql2/promise";
+import { credentials, datacategory, dataposts, datausers } from "./db/data_schema.ts";
+import jwt from "jsonwebtoken"
 
 const app: Express = express();
 const port = 8000;
@@ -278,7 +279,7 @@ app.post("/api/users", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/users/:id", async (req: Request, res: Response) => {
+app.put("/api/users/:id", tokenMiddleware , async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
@@ -340,6 +341,63 @@ app.delete("/api/users/:id", async (req: Request, res: Response) => {
     });
   }
 });
+
+
+
+app.post("/api/auth/login", async (req: Request, res: Response) => {
+  try { 
+    const validasiData = credentials.parse(req.body);
+    const { email, password } = validasiData;
+    const [users] = await pool.query<RowDataPacket[]>("select * from users where email = ? limit 1", [email])
+
+    if (users.length == 0) {
+      throw new Error("data tidak ditemukan");
+    }
+
+    if (users[0].password != password) {
+      throw new Error("email / password salah");
+    }
+
+    const token = jwt.sign(users[0], "tokendeh")
+  
+    res.status(200).json({
+      message: "Login berhasil",
+      token: token
+    })
+    
+  } catch (error) {
+    if (error instanceof Error) {
+      res.status(500).json({
+        message: error.message 
+      });
+    }
+  }
+});
+
+function tokenMiddleware(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(' ')[1];
+  // console.log(req.headers.authorization)
+
+   if (!token) {
+    return res.status(401).json({
+      message: "Unauthorized. No token provided"
+    })
+  }
+
+  jwt.verify(token, "tokendeh", (err, user) => {
+    if (err) {
+      return res.status(403).json({
+        message: "Invalid token"
+      })
+    }
+    next()
+  })
+}
+
+app.get("/", tokenMiddleware, (req : Request, res : Response) => {
+  console.log("token terdeteksi")
+})
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);

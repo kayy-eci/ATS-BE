@@ -67,3 +67,8 @@ export const datausers = z.object({
   email: z.email("invalid email addresess"),
   password: z.string().min(4),
 });
+
+export const credentials = z.object({
+  email: z.email("Invalid email address"),
+  password: z.string().min(4)
+})
