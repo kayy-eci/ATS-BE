@@ -11,7 +11,7 @@ const port = 8000;
 app.use(cors());
 app.use(express.json());
 
-app.get("/api/categories", async (req: Request, res: Response) => {
+app.get("/api/categories", tokenMiddleware, async (req: Request, res: Response) => {
   const [categories] = await pool.query("select * from categories;");
 
   res.status(200).json({
@@ -20,7 +20,7 @@ app.get("/api/categories", async (req: Request, res: Response) => {
   });
 });
 
-app.post("/api/categories", async (req: Request, res: Response) => {
+app.post("/api/categories", tokenMiddleware, async (req: Request, res: Response) => {
   try {
     const validasiData = datacategory.parse(req.body);
 
@@ -48,7 +48,7 @@ app.post("/api/categories", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/categories/:id", async (req: Request, res: Response) => {
+app.put("/api/categories/:id", tokenMiddleware, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
@@ -85,7 +85,7 @@ app.put("/api/categories/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/api/categories/:id", async (req, res) => {
+app.delete("/api/categories/:id", tokenMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id);
 
@@ -119,7 +119,7 @@ app.delete("/api/categories/:id", async (req, res) => {
   }
 });
 
-app.get("/api/posts", async (req: Request, res: Response) => {
+app.get("/api/posts", tokenMiddleware, async (req: Request, res: Response) => {
   const [posts] = await pool.query("select * from posts;");
   res.status(200).json({
     message: "Berhasil fetch posts!",
@@ -127,7 +127,7 @@ app.get("/api/posts", async (req: Request, res: Response) => {
   });
 });
 
-app.post("/api/posts", async (req: Request, res: Response) => {
+app.post("/api/posts", tokenMiddleware, async (req: Request, res: Response) => {
   try {
     const validasiData = dataposts.parse(req.body);
     const {
@@ -160,7 +160,7 @@ app.post("/api/posts", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/posts/:id", async (req: Request, res: Response) => {
+app.put("/api/posts/:id", tokenMiddleware, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
@@ -213,7 +213,7 @@ app.put("/api/posts/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/api/posts/:id", async (req, res) => {
+app.delete("/api/posts/:id", tokenMiddleware, async (req, res) => {
   try {
     const id = Number(req.params.id);
 
@@ -245,7 +245,7 @@ app.delete("/api/posts/:id", async (req, res) => {
   }
 });
 
-app.get("/api/users", async (req: Request, res: Response) => {
+app.get("/api/users", tokenMiddleware, async (req: Request, res: Response) => {
   const [users] = await pool.query("select * from users");
 
   res.status(201).json({
@@ -311,7 +311,7 @@ app.put("/api/users/:id", tokenMiddleware , async (req: Request, res: Response) 
   }
 });
 
-app.delete("/api/users/:id", async (req: Request, res: Response) => {
+app.delete("/api/users/:id", tokenMiddleware, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
