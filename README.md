@@ -42,6 +42,8 @@ Kelompok endpoint:
 | User | `GET/PUT/DELETE /api/users` | JWT |
 | Category | `GET/POST/PUT/DELETE /api/categories` | JWT |
 | Post | `GET/POST/PUT/DELETE /api/posts` | JWT |
+| Upload | `POST /api/upload` | JWT |
+| Upload | `GET /uploads/<file>` | Publik (agar gambar bisa ditampilkan tanpa token) |
 
 ## Teknologi
 
@@ -583,6 +585,39 @@ Response sukses (`200`):
 ```
 
 Jika post tidak ditemukan, response `404`.
+
+### `POST /api/upload`
+
+Mengunggah gambar cover artikel. Membutuhkan JWT. Body memakai
+`multipart/form-data` dengan field **`image`** (hanya gambar, maksimal 5 MB).
+File disimpan di folder `uploads/` dan diserve secara publik.
+
+Contoh:
+
+```bash
+curl -X POST http://localhost:8000/api/upload ^
+  -H "Authorization: Bearer <jwt>" ^
+  -F "image=@cover.jpg"
+```
+
+Response sukses (`201`):
+
+```json
+{
+  "message": "Upload berhasil",
+  "url": "/uploads/1700000000000-123456789.jpg"
+}
+```
+
+Isi `cover_image` pada `POST/PUT /api/posts` dengan URL absolut hasil
+gabungan base URL + `url` di atas, contoh:
+`http://localhost:8000/uploads/1700000000000-123456789.jpg`
+(maksimal 255 karakter sesuai validasi schema).
+
+### `GET /uploads/<file>`
+
+Mengambil file gambar yang sudah diunggah. Endpoint ini publik (tanpa JWT)
+agar `<img>` / `Image.network` di Flutter bisa menampilkannya langsung.
 
 ### `GET /`
 

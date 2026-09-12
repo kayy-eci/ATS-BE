@@ -1,5 +1,9 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import multer from "multer";
 import pool from "./db/index.ts";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { credentials, datacategory, dataposts, datausers } from "./db/data_schema.ts";
@@ -10,6 +14,62 @@ const port = 8000;
 
 app.use(cors());
 app.use(express.json());
+
+// ---- Upload cover image ----
+// Folder uploads/ diserve publik (tanpa JWT) karena <img>/Image.network
+// tidak bisa mengirim header Authorization. Upload-nya sendiri tetap
+// dilindungi tokenMiddleware.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.join(__dirname, "..", "uploads");
+fs.mkdirSync(uploadsDir, { recursive: true });
+app.use("/uploads", express.static(uploadsDir));
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path
+      .extname(file.originalname || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9.]/g, "");
+    const safeExt = [".jpg", ".jpeg", ".png", ".webp", ".gif"].includes(ext)
+      ? ext
+      : ".jpg";
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Hanya file gambar yang diperbolehkan"));
+    }
+  },
+});
+
+app.post("/api/upload", tokenMiddleware, (req: Request, res: Response) => {
+  upload.single("image")(req, res, (err: unknown) => {
+    if (err) {
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "Upload gagal",
+      });
+      return;
+    }
+    if (!req.file) {
+      res.status(400).json({
+        message: "Field 'image' wajib diisi",
+      });
+      return;
+    }
+    res.status(201).json({
+      message: "Upload berhasil",
+      url: `/uploads/${req.file.filename}`,
+    });
+  });
+});
 
 app.get("/api/categories", tokenMiddleware, async (req: Request, res: Response) => {
   const [categories] = await pool.query("select * from categories;");
