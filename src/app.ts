@@ -8,12 +8,15 @@ import pool from "./db/index.ts";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { credentials, datacategory, dataposts, datausers } from "./db/data_schema.ts";
 import jwt from "jsonwebtoken"
+import { z } from "zod";
 
 const app: Express = express();
 const port = 8000;
 
 app.use(cors());
 app.use(express.json());
+// Untuk form urlencoded biasa (multer tetap yang handle multipart/form-data).
+app.use(express.urlencoded({ extended: true }));
 
 // ---- Upload cover image ----
 // Folder uploads/ diserve publik (tanpa JWT) karena <img>/Image.network
@@ -50,23 +53,110 @@ const upload = multer({
   },
 });
 
+// ---- Helper multipart untuk posts ----
+// Flutter mengirim POST/PUT /api/posts sebagai multipart/form-data dengan
+// field file bernama `cover_image` + semua field teks sebagai string.
+// express.json() tidak bisa parse multipart sehingga req.body undefined
+// (penyebab ZodError "expected object, received undefined").
+// Middleware ini menjalankan multer hanya untuk multipart, lalu
+// menormalisasi req.file dari beberapa nama field yang didukung.
+const postCoverUpload = upload.fields([
+  { name: "cover_image", maxCount: 1 },
+  { name: "image", maxCount: 1 },
+  { name: "file", maxCount: 1 },
+]);
+
+type RequestWithCover = Request & {
+  file?: Express.Multer.File;
+  files?: Record<string, Express.Multer.File[]>;
+};
+
+function runPostCover(req: Request, res: Response, next: NextFunction) {
+  const contentType = req.headers["content-type"] ?? "";
+  if (!contentType.includes("multipart/form-data")) {
+    if (req.body == null || typeof req.body !== "object") {
+      (req as RequestWithCover).body = {};
+    }
+    next();
+    return;
+  }
+  postCoverUpload(req, res, (err: unknown) => {
+    if (err) {
+      res.status(400).json({
+        message: err instanceof Error ? err.message : "Upload cover gagal",
+      });
+      return;
+    }
+    const r = req as RequestWithCover;
+    const files = (r.files ?? {}) as Record<string, Express.Multer.File[] | undefined>;
+    r.file = files.cover_image?.[0] ?? files.image?.[0] ?? files.file?.[0];
+    if (r.body == null || typeof r.body !== "object") {
+      r.body = {};
+    }
+    next();
+  });
+}
+
+// Gabungkan body + file upload menjadi satu input untuk Zod.
+// File menang atas string cover_image; string kosong dianggap tidak diisi.
+function buildPostInput(req: Request) {
+  const r = req as RequestWithCover;
+  const raw = (r.body ?? {}) as Record<string, unknown>;
+  const coverFromFile = r.file ? `/uploads/${r.file.filename}` : undefined;
+  const coverRaw = coverFromFile ?? raw.cover_image;
+  return {
+    title: raw.title,
+    slug: raw.slug === "" ? undefined : raw.slug,
+    content: raw.content,
+    excerpt: raw.excerpt === "" ? undefined : raw.excerpt,
+    cover_image: coverRaw === "" ? undefined : coverRaw,
+    category_id: raw.category_id,
+    author: raw.author === "" ? undefined : raw.author,
+    status: raw.status ?? undefined,
+  };
+}
+
+// Balas 400 + detail issues untuk ZodError agar gampang di-debug dari Flutter,
+// bukan 500 generik.
+function sendZodOrServerError(res: Response, error: unknown, fallback: string) {
+  if (error instanceof z.ZodError) {
+    res.status(400).json({
+      message: "Validasi gagal",
+      errors: error.issues,
+    });
+    return;
+  }
+  console.error(error);
+  res.status(500).json({
+    message: fallback,
+  });
+}
+
 app.post("/api/upload", tokenMiddleware, (req: Request, res: Response) => {
-  upload.single("image")(req, res, (err: unknown) => {
+  // Terima `image` (kontrak lama) + `cover_image`/`file` (kontrak Flutter).
+  postCoverUpload(req, res, (err: unknown) => {
     if (err) {
       res.status(400).json({
         message: err instanceof Error ? err.message : "Upload gagal",
       });
       return;
     }
-    if (!req.file) {
+    const r = req as RequestWithCover;
+    const file =
+      r.file ??
+      (() => {
+        const files = (r.files ?? {}) as Record<string, Express.Multer.File[] | undefined>;
+        return files.cover_image?.[0] ?? files.image?.[0] ?? files.file?.[0];
+      })();
+    if (!file) {
       res.status(400).json({
-        message: "Field 'image' wajib diisi",
+        message: "Field 'image' (atau 'cover_image') wajib diisi",
       });
       return;
     }
     res.status(201).json({
       message: "Upload berhasil",
-      url: `/uploads/${req.file.filename}`,
+      url: `/uploads/${file.filename}`,
     });
   });
 });
@@ -187,9 +277,10 @@ app.get("/api/posts", tokenMiddleware, async (req: Request, res: Response) => {
   });
 });
 
-app.post("/api/posts", tokenMiddleware, async (req: Request, res: Response) => {
+app.post("/api/posts", tokenMiddleware, runPostCover, async (req: Request, res: Response) => {
   try {
-    const validasiData = dataposts.parse(req.body);
+    // Dukung JSON murni (tanpa gambar) + multipart (dengan gambar).
+    const validasiData = dataposts.parse(buildPostInput(req));
     const {
       title,
       slug,
@@ -200,27 +291,35 @@ app.post("/api/posts", tokenMiddleware, async (req: Request, res: Response) => {
       author,
       status,
     } = validasiData;
+    // mysql2 tidak menerima `undefined`, ubah ke NULL untuk kolom nullable.
     const [Post] = await pool.query<ResultSetHeader>(
       `INSERT INTO posts (title, slug, content, excerpt, cover_image, category_id, author, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [title, slug, content, excerpt, cover_image, category_id, author, status],
+      [
+        title,
+        slug ?? null,
+        content,
+        excerpt ?? null,
+        cover_image ?? null,
+        category_id,
+        author ?? null,
+        status,
+      ],
     );
     res.status(201).json({
       message: "post created succesfully",
       data: {
         postId: Post.insertId,
         title,
+        cover_image: cover_image ?? null,
       },
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({
-      message: "Failed to create post",
-    });
+    sendZodOrServerError(res, error, "Failed to create post");
   }
 });
 
-app.put("/api/posts/:id", tokenMiddleware, async (req: Request, res: Response) => {
+app.put("/api/posts/:id", tokenMiddleware, runPostCover, async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
 
@@ -231,7 +330,7 @@ app.put("/api/posts/:id", tokenMiddleware, async (req: Request, res: Response) =
       return;
     }
 
-    const validasiData = dataposts.parse(req.body);
+    const validasiData = dataposts.parse(buildPostInput(req));
     const {
       title,
       slug,
@@ -242,16 +341,37 @@ app.put("/api/posts/:id", tokenMiddleware, async (req: Request, res: Response) =
       author,
       status,
     } = validasiData;
+
+    // Kalau edit tanpa ganti gambar (tidak ada file & tidak ada field
+    // cover_image), pertahankan cover lama agar tidak ke-NULL.
+    let finalCover: string | null | undefined = cover_image;
+    const bodyHadCover =
+      (req as RequestWithCover).file != null ||
+      (req.body as Record<string, unknown> | undefined)?.cover_image !== undefined;
+    if (!bodyHadCover) {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT cover_image FROM posts WHERE id = ? LIMIT 1",
+        [id],
+      );
+      if (rows.length === 0) {
+        res.status(404).json({
+          message: "Post tidak ditemukan",
+        });
+        return;
+      }
+      finalCover = (rows[0].cover_image as string | null) ?? null;
+    }
+
     const [Post] = await pool.query<ResultSetHeader>(
       "UPDATE posts SET title = ?, slug = ?, content = ?, excerpt = ?, cover_image = ?, category_id = ?, author = ?, status = ? WHERE id = ?",
       [
         title,
-        slug,
+        slug ?? null,
         content,
-        excerpt,
-        cover_image,
+        excerpt ?? null,
+        finalCover ?? null,
         category_id,
-        author,
+        author ?? null,
         status,
         id,
       ],
@@ -259,17 +379,99 @@ app.put("/api/posts/:id", tokenMiddleware, async (req: Request, res: Response) =
 
     if (Post.affectedRows == 0) {
       res.status(404).json({
-        message: "error",
+        message: "Post tidak ditemukan",
       });
       return;
     }
     res.status(200).json({
       message: "Data post berhasil diupdate",
+      data: { cover_image: finalCover ?? null },
     });
   } catch (error) {
-    res.status(400).json({
-      message: "Data post tidak valid",
+    sendZodOrServerError(res, error, "Data post tidak valid");
+  }
+});
+
+// Fallback untuk Flutter: PUT multipart kadang ditolak client/server,
+// jadi Flutter mengirim POST + field `_method=PUT` (lihat editpost.dart).
+// Tanpa route ini fallback tersebut selalu 404.
+app.post("/api/posts/:id", tokenMiddleware, runPostCover, async (req: Request, res: Response) => {
+  const method = String(
+    (req.body as Record<string, unknown> | undefined)?._method ?? "",
+  ).toUpperCase();
+  if (method !== "PUT") {
+    res.status(405).json({
+      message: "Method tidak didukung. Gunakan PUT atau POST dengan _method=PUT",
     });
+    return;
+  }
+  try {
+    const id = Number(req.params.id);
+
+    if (Number.isNaN(id) || id <= 0) {
+      res.status(400).json({
+        message: "Invalid post ID",
+      });
+      return;
+    }
+
+    const validasiData = dataposts.parse(buildPostInput(req));
+    const {
+      title,
+      slug,
+      content,
+      excerpt,
+      cover_image,
+      category_id,
+      author,
+      status,
+    } = validasiData;
+
+    let finalCover: string | null | undefined = cover_image;
+    const bodyHadCover =
+      (req as RequestWithCover).file != null ||
+      (req.body as Record<string, unknown> | undefined)?.cover_image !== undefined;
+    if (!bodyHadCover) {
+      const [rows] = await pool.query<RowDataPacket[]>(
+        "SELECT cover_image FROM posts WHERE id = ? LIMIT 1",
+        [id],
+      );
+      if (rows.length === 0) {
+        res.status(404).json({
+          message: "Post tidak ditemukan",
+        });
+        return;
+      }
+      finalCover = (rows[0].cover_image as string | null) ?? null;
+    }
+
+    const [Post] = await pool.query<ResultSetHeader>(
+      "UPDATE posts SET title = ?, slug = ?, content = ?, excerpt = ?, cover_image = ?, category_id = ?, author = ?, status = ? WHERE id = ?",
+      [
+        title,
+        slug ?? null,
+        content,
+        excerpt ?? null,
+        finalCover ?? null,
+        category_id,
+        author ?? null,
+        status,
+        id,
+      ],
+    );
+
+    if (Post.affectedRows == 0) {
+      res.status(404).json({
+        message: "Post tidak ditemukan",
+      });
+      return;
+    }
+    res.status(200).json({
+      message: "Data post berhasil diupdate",
+      data: { cover_image: finalCover ?? null },
+    });
+  } catch (error) {
+    sendZodOrServerError(res, error, "Data post tidak valid");
   }
 });
 
@@ -384,7 +586,7 @@ app.delete("/api/users/:id", tokenMiddleware, async (req: Request, res: Response
     const [users] = await pool.query<ResultSetHeader>(
       "DELETE FROM users WHERE id = ?",
       [id],
-    );
+    );  
 
     if (users.affectedRows === 0) {
       res.status(404).json({
@@ -455,9 +657,6 @@ function tokenMiddleware(req: Request, res: Response, next: NextFunction) {
   })
 }
 
-app.get("/", tokenMiddleware, (req : Request, res : Response) => {
-  console.log("token terdeteksi")
-})
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
